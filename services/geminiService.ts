@@ -1,13 +1,13 @@
 
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { fileToGenerativePart } from '../utils/fileUtils';
 import type { GeneratedImage } from '../types';
 
 // Helper to get the API client initialized
-const getAiClient = () => {
-    const apiKey = process.env.API_KEY;
+const getAiClient = (apiKey: string) => {
     if (!apiKey) {
-        throw new Error("Kunci API Gemini tidak ditemukan. Pastikan variabel lingkungan API_KEY telah diatur.");
+        throw new Error("Kunci API Gemini tidak disediakan. Harap atur di menu Pengaturan.");
     }
     return new GoogleGenAI({ apiKey });
 };
@@ -26,10 +26,11 @@ const loadingMessages = [
 export const generateCombinedImage = async (
     referenceImage: File,
     productImage: File,
-    extraNotes: string
+    extraNotes: string,
+    apiKey: string
 ): Promise<{ url: string; prompt: string }> => {
     
-    const ai = getAiClient();
+    const ai = getAiClient(apiKey);
     const referencePart = await fileToGenerativePart(referenceImage);
     const productPart = await fileToGenerativePart(productImage);
 
@@ -69,11 +70,11 @@ IMPORTANT RULES:
 
 export const generateVideoFromImage = async (
     image: GeneratedImage,
+    apiKey: string,
     updateLoadingMessage: (message: string) => void,
     updateProgress: (progress: number) => void
 ): Promise<{ url: string; prompt: string }> => {
-    const ai = getAiClient();
-    const apiKey = process.env.API_KEY;
+    const ai = getAiClient(apiKey);
      if (!apiKey) {
         throw new Error("Kunci API Gemini tidak ditemukan untuk mengambil video.");
     }
@@ -147,11 +148,11 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
 export const upscaleVideo = async (
     baseImage: GeneratedImage, // Use the original image for consistency
     factor: number,
+    apiKey: string,
     updateLoadingMessage: (message: string) => void,
     updateProgress: (progress: number) => void
 ): Promise<{ url: string; prompt: string }> => {
-    const ai = getAiClient();
-    const apiKey = process.env.API_KEY;
+    const ai = getAiClient(apiKey);
      if (!apiKey) {
         throw new Error("Kunci API Gemini tidak ditemukan untuk mengambil video.");
     }

@@ -1,12 +1,16 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import GeneratedResult from './components/GeneratedResult';
 import Loader from './components/Loader';
+import SettingsModal from './components/SettingsModal';
+import { SettingsIcon } from './components/icons';
 import { generateCombinedImage, generateVideoFromImage, upscaleVideo } from './services/geminiService';
 import { preprocessImageTo16x9 } from './utils/fileUtils';
 import { cropVideoTo9x16 } from './utils/videoUtils';
 import type { ImageFile, GeneratedImage, GeneratedVideo, UpscaledVideos } from './types';
+
+const API_KEY_STORAGE_KEY = 'gemini_api_key';
 
 // Helper to create more user-friendly error messages
 const getDisplayError = (err: unknown): string => {
@@ -15,14 +19,13 @@ const getDisplayError = (err: unknown): string => {
     message = err.message;
     // Check for quota-related errors from the Gemini API
     if (message.includes('RESOURCE_EXHAUSTED') || message.toLowerCase().includes('quota')) {
-      return "Kuota API Anda telah terlampaui. Harap ganti dengan Kunci API baru di panel 'Secrets', atau aktifkan penagihan untuk proyek Google Cloud Anda.";
+      return "Kuota API Anda telah terlampaui. Silakan ganti dengan Kunci API baru di menu Pengaturan (ikon gerigi).";
     }
-    // Update error message for API key to reflect environment variable usage.
      if (message.includes('API key not valid')) {
-      return "Kunci API tidak valid. Pastikan variabel lingkungan API_KEY Anda benar di panel 'Secrets'.";
+      return "Kunci API tidak valid. Silakan periksa kunci Anda di menu Pengaturan.";
     }
-     if (message.includes("Kunci API Gemini tidak ditemukan")) {
-       return "Kunci API Gemini tidak ditemukan. Pastikan Anda telah mengaturnya di panel 'Secrets' sebagai variabel bernama API_KEY.";
+     if (message.includes("Kunci API Gemini tidak disediakan")) {
+       return "Kunci API Gemini tidak ditemukan. Harap atur di menu Pengaturan (ikon gerigi di pojok kanan atas).";
     }
   }
   return message;
@@ -54,7 +57,32 @@ function App() {
 
   const [error, setError] = useState<string | null>(null);
 
+  const [apiKey, setApiKey] = useState('');
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isApiKeySet, setIsApiKeySet] = useState(false);
+
+  useEffect(() => {
+    const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+    if (storedApiKey) {
+      setApiKey(storedApiKey);
+      setIsApiKeySet(true);
+    }
+  }, []);
+
+  const handleSaveApiKey = (newApiKey: string) => {
+    setApiKey(newApiKey);
+    localStorage.setItem(API_KEY_STORAGE_KEY, newApiKey);
+    setIsApiKeySet(!!newApiKey);
+    setIsSettingsModalOpen(false);
+    setError(null); // Clear previous errors
+  };
+
   const handleImageGeneration = async () => {
+    if (!apiKey) {
+      setError("Harap atur Kunci API Gemini Anda di menu Pengaturan sebelum melanjutkan.");
+      setIsSettingsModalOpen(true);
+      return;
+    }
     if (!referenceImage || !productImage) {
       setError("Silakan unggah gambar referensi dan produk.");
       return;
@@ -73,7 +101,7 @@ function App() {
       const processedProdFile = await preprocessImageTo16x9(productImage.file);
 
       setImageLoadingMessage("Membuat gambar fotorealistik...");
-      const result = await generateCombinedImage(processedRefFile, processedProdFile, extraNotes);
+      const result = await generateCombinedImage(processedRefFile, processedProdFile, extraNotes, apiKey);
       setGeneratedImage(result);
 
     } catch (err) {
@@ -99,7 +127,7 @@ function App() {
     setVideoLoadingMessage("Memulai pembuatan video...");
 
     try {
-        const result = await generateVideoFromImage(generatedImage, setVideoLoadingMessage, setVideoProgress);
+        const result = await generateVideoFromImage(generatedImage, apiKey, setVideoLoadingMessage, setVideoProgress);
         setGeneratedVideo(result);
     } catch (err) {
         console.error(err);
@@ -120,11 +148,8 @@ function App() {
     setCroppingProgress(0);
 
     try {
-        const croppedUrl = await cropVideoTo9x16(generatedVideo.url, setCroppingProgress);
-        setCroppedVideo({
-            url: croppedUrl,
-            prompt: `Video asli dipotong ke rasio aspek 9:16. Prompt video asli: "${generatedVideo.prompt}"`
-        });
+        const url = await cropVideoTo9x16(generatedVideo.url, setCroppingProgress);
+        setCroppedVideo({ ...generatedVideo, url });
     } catch (err) {
         console.error(err);
         setError(getDisplayError(err));
@@ -135,32 +160,26 @@ function App() {
 
   const handleUpscaleVideo = async (factor: 2 | 4) => {
     if (!generatedImage) {
-        setError("Gambar asli diperlukan untuk peningkatan skala.");
+        setError("Tidak dapat meningkatkan skala, gambar dasar asli tidak ditemukan.");
         return;
     }
+    if (!croppedVideo) {
+        setError("Video harus dipotong ke 9:16 terlebih dahulu sebelum ditingkatkan skalanya.");
+        return;
+    }
+    
     setError(null);
     setIsUpscaling(factor);
     setUpscalingProgress(0);
-    setUpscalingMessage(`Memulai peningkatan skala ${factor}x...`);
-
+    setUpscalingMessage(`Meningkatkan skala video ${factor}x...`);
+    
     try {
-        // 1. Generate a new, high-detail 16:9 video from the original source image.
-        const result = await upscaleVideo(generatedImage, factor, setUpscalingMessage, setUpscalingProgress);
+        const result = await upscaleVideo(generatedImage, factor, apiKey, setUpscalingMessage, setUpscalingProgress);
         
-        // 2. Crop the newly generated high-detail video to 9:16.
-        setUpscalingMessage(`Memotong video ${factor}x yang ditingkatkan...`);
-        const croppedUpscaledUrl = await cropVideoTo9x16(result.url, (progress) => {
-            setUpscalingProgress(progress);
-        });
-        
-        setUpscaledVideos(prev => ({
-            ...prev,
-            [factor]: {
-                url: croppedUpscaledUrl,
-                prompt: `Video ditingkatkan ${factor}x, lalu dipotong ke 9:16. Prompt asli untuk peningkatan: "${result.prompt}"`
-            }
-        }));
+        setUpscalingMessage('Finalisasi: memotong ke 9:16...');
+        const croppedResultUrl = await cropVideoTo9x16(result.url);
 
+        setUpscaledVideos(prev => ({ ...prev, [factor]: {...result, url: croppedResultUrl} }));
     } catch (err) {
         console.error(err);
         setError(getDisplayError(err));
@@ -169,111 +188,135 @@ function App() {
     }
   };
 
-  const isCombineButtonDisabled = !referenceImage || !productImage || isLoadingImage;
+  const renderResults = () => {
+    const isLoading = isLoadingImage || isLoadingVideo || isCropping || isUpscaling;
+    if (isLoading) {
+        return (
+            <div className="flex justify-center mt-8">
+                 {isLoadingImage && <Loader message={imageLoadingMessage} />}
+                 {isLoadingVideo && <Loader message={videoLoadingMessage} progress={videoProgress} />}
+                 {isCropping && <Loader message={`Memotong video ke 9:16...`} progress={croppingProgress} />}
+                 {isUpscaling && <Loader message={upscalingMessage} progress={upscalingProgress} />}
+            </div>
+        )
+    }
+
+    if (generatedVideo) {
+        return (
+             <GeneratedResult
+                mediaUrl={croppedVideo?.url || generatedVideo.url}
+                mediaType="video"
+                prompt={croppedVideo?.prompt || generatedVideo.prompt}
+                isCropped={!!croppedVideo}
+                onCropVideo={!croppedVideo ? handleCropVideo : undefined}
+                isCropping={isCropping}
+                onUpscale={croppedVideo ? handleUpscaleVideo : undefined}
+                upscalingFactor={isUpscaling}
+                upscaledVideos={upscaledVideos}
+            />
+        )
+    }
+    
+    if (generatedImage) {
+        return (
+            <GeneratedResult
+                mediaUrl={generatedImage.url}
+                mediaType="image"
+                prompt={generatedImage.prompt}
+                onGenerateVideo={handleVideoGeneration}
+                isGeneratingVideo={isLoadingVideo}
+            />
+        )
+    }
+
+    return null;
+  };
 
   return (
-    <>
-      <div className="min-h-screen bg-gradient-to-b from-[#101010] to-[#030303] text-gray-200 p-4 sm:p-8">
-        <div className="container mx-auto max-w-6xl">
-          <header className="text-center mb-12 relative">
-            <h1 className="text-4xl sm:text-5xl font-bold text-amber-400 tracking-wide">AI Product Placement Studio</h1>
-            <p className="mt-4 text-lg text-gray-400 max-w-3xl mx-auto">
-              Gabungkan produk ke dalam adegan dengan mulus. Unggah referensi dan gambar produk untuk menghasilkan visual fotorealistik.
-            </p>
-          </header>
-
-          <main>
-            <div className="bg-black/20 backdrop-blur-lg border border-gray-800 rounded-2xl shadow-2xl p-6 sm:p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FileUpload
-                  title="Gambar Referensi"
-                  description="Unggah latar belakang adegan atau pose model."
-                  imageFile={referenceImage}
-                  onFileSelect={setReferenceImage}
-                />
-                <FileUpload
-                  title="Gambar Produk"
-                  description="Unggah produk yang akan ditempatkan di adegan."
-                  imageFile={productImage}
-                  onFileSelect={setProductImage}
-                />
-              </div>
-              
-              <div className="mt-6">
-                <textarea
-                  value={extraNotes}
-                  onChange={(e) => setExtraNotes(e.target.value)}
-                  placeholder="Opsional: Tambahkan catatan tambahan untuk AI (mis., 'letakkan jam tangan di pergelangan tangan kiri')"
-                  className="w-full p-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition"
-                  rows={2}
-                ></textarea>
-              </div>
-
-              <div className="mt-6 text-center">
-                <button
-                  onClick={handleImageGeneration}
-                  disabled={isCombineButtonDisabled}
-                  className="bg-amber-400 text-black font-bold py-3 px-8 rounded-lg text-lg hover:bg-amber-500 transition-colors disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(252,212,40,0.3)] hover:shadow-[0_0_25px_rgba(252,212,40,0.5)]"
-                >
-                  {isLoadingImage ? 'Membuat...' : 'Gabungkan Gambar'}
-                </button>
-              </div>
-            </div>
-            
-            {error && (
-              <div className="mt-8 text-center bg-red-900/30 border border-red-700 p-4 rounded-lg">
-                  <p className="font-semibold text-red-300">Error</p>
-                  <p className="text-red-400">{error}</p>
-              </div>
-            )}
-
-            {isLoadingImage && <div className="mt-8 flex justify-center"><Loader message={imageLoadingMessage} /></div>}
-
-            {generatedImage && !isLoadingImage && (
-              <GeneratedResult 
-                  mediaUrl={generatedImage.url}
-                  mediaType="image"
-                  prompt={generatedImage.prompt}
-                  onGenerateVideo={handleVideoGeneration}
-                  isGeneratingVideo={isLoadingVideo}
-              />
-            )}
-
-            {isLoadingVideo && <div className="mt-8 flex justify-center"><Loader message={videoLoadingMessage} progress={videoProgress} /></div>}
-
-            {generatedVideo && !isLoadingVideo && !isCropping && !croppedVideo &&(
-              <GeneratedResult 
-                  mediaUrl={generatedVideo.url}
-                  mediaType="video"
-                  prompt={generatedVideo.prompt}
-                  onCropVideo={handleCropVideo}
-                  isCropping={isCropping}
-              />
-            )}
-
-            {isCropping && <div className="mt-8 flex justify-center"><Loader message={`Memotong ke 9:16...`} progress={croppingProgress} /></div>}
-
-            {croppedVideo && (
-              <GeneratedResult
-                  mediaUrl={croppedVideo.url}
-                  mediaType="video"
-                  prompt={croppedVideo.prompt}
-                  isCropped={true}
-                  onUpscale={handleUpscaleVideo}
-                  upscalingFactor={isUpscaling}
-                  upscaledVideos={upscaledVideos}
-              />
-            )}
-
-            {isUpscaling && (
-              <div className="mt-8 flex justify-center">
-                <Loader message={upscalingMessage} progress={upscalingProgress} />
-              </div>
-            )}
-          </main>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-[#111111] to-[#030303] text-white p-4 sm:p-8">
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          onClick={() => setIsSettingsModalOpen(true)}
+          className="p-2 rounded-full bg-black/30 backdrop-blur-sm hover:bg-amber-400/20 text-gray-300 hover:text-amber-400 transition-colors"
+          aria-label="Pengaturan"
+        >
+          <SettingsIcon className="w-6 h-6" />
+        </button>
       </div>
-    </>
+
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onSave={handleSaveApiKey}
+        currentApiKey={apiKey}
+      />
+
+      <header className="text-center mb-10">
+        <h1 className="text-4xl sm:text-5xl font-bold">
+          AI Asisten <span className="text-amber-400">Affiliator</span>
+        </h1>
+        <p className="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+          Unggah foto referensi dan produk Anda untuk membuat video promosi yang menakjubkan dalam hitungan menit.
+        </p>
+      </header>
+      
+      {!isApiKeySet && !isSettingsModalOpen && (
+          <div className="max-w-4xl mx-auto mb-6 p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg text-center">
+              <p className="font-semibold text-yellow-200">
+                  Kunci API Google Gemini Anda belum diatur. Silakan klik ikon gerigi (⚙️) di pojok kanan atas untuk menambahkannya.
+              </p>
+          </div>
+      )}
+
+      {error && (
+        <div className="max-w-4xl mx-auto mb-6 p-4 bg-red-900/50 border border-red-700 rounded-lg text-center flex justify-between items-center" role="alert">
+          <p className="font-semibold text-red-200 text-left">{error}</p>
+          <button onClick={() => setError(null)} className="text-red-200 hover:text-white font-bold p-1 text-2xl leading-none">&times;</button>
+        </div>
+      )}
+
+      <main className="max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FileUpload
+            onFileSelect={setReferenceImage}
+            imageFile={referenceImage}
+            title="Unggah Foto Referensi"
+            description="Seret & lepas atau klik untuk memilih foto model, suasana, atau gaya."
+          />
+          <FileUpload
+            onFileSelect={setProductImage}
+            imageFile={productImage}
+            title="Unggah Foto Produk"
+            description="Seret & lepas atau klik untuk memilih foto produk Anda dengan latar belakang polos."
+          />
+        </div>
+
+        <div className="mt-6">
+            <label htmlFor="extra-notes" className="block text-sm font-medium text-gray-300 mb-2">Catatan Tambahan (Opsional)</label>
+            <textarea
+                id="extra-notes"
+                value={extraNotes}
+                onChange={(e) => setExtraNotes(e.target.value)}
+                placeholder="Contoh: fokus pada detail jam tangan, gunakan pencahayaan pagi hari..."
+                rows={3}
+                className="w-full p-3 bg-gray-800/50 border border-gray-700 rounded-lg text-gray-200 focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition"
+            />
+        </div>
+
+        <div className="mt-8 text-center">
+          <button
+            onClick={handleImageGeneration}
+            disabled={isLoadingImage || !referenceImage || !productImage}
+            className="bg-amber-400 text-black font-bold py-3 px-8 rounded-lg text-lg hover:bg-amber-500 transition-colors disabled:bg-gray-700 disabled:cursor-not-allowed disabled:text-gray-400 flex items-center justify-center mx-auto shadow-[0_0_15px_rgba(252,212,40,0.3)] hover:shadow-[0_0_25px_rgba(252,212,40,0.5)]"
+          >
+            {isLoadingImage ? 'Membuat...' : '1. Buat Gambar'}
+          </button>
+        </div>
+
+        {renderResults()}
+        
+      </main>
+    </div>
   );
 }
 
