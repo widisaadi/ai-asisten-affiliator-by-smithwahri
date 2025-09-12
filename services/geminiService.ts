@@ -6,30 +6,31 @@ import type { GeneratedImage } from '../types';
 
 const API_KEY_STORAGE_KEY = 'gemini_api_key';
 
-// Helper to get the latest API key directly from storage
+// Helper untuk mendapatkan Kunci API dari localStorage atau 'Secrets'
 const getApiKey = (): string => {
-    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+    // Prioritaskan kunci dari localStorage, lalu fallback ke 'Secrets'
+    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY) || process.env.API_KEY;
     if (!apiKey) {
-        throw new Error("Kunci API Gemini tidak ditemukan. Harap atur di menu Pengaturan.");
+        throw new Error("Kunci API Gemini tidak ditemukan. Harap atur di menu pengaturan (ikon gerigi ⚙️).");
     }
     return apiKey;
 };
 
-// Helper to get the API client initialized with the latest key
+// Helper untuk mendapatkan klien API yang diinisialisasi
 const getAiClient = () => {
     const apiKey = getApiKey();
     return new GoogleGenAI({ apiKey });
 };
 
 const loadingMessages = [
-    "Warming up the digital canvas...",
-    "Summoning creative algorithms...",
-    "Mixing digital paints...",
-    "Briefing the AI director...",
-    "Setting up virtual cameras...",
-    "This can take a few minutes, good things come to those who wait!",
-    "Polishing pixels...",
-    "Rendering the final scene...",
+    "Memanaskan kanvas digital...",
+    "Memanggil algoritma kreatif...",
+    "Mencampur cat digital...",
+    "Memberi pengarahan pada sutradara AI...",
+    "Menyiapkan kamera virtual...",
+    "Ini bisa memakan waktu beberapa menit, hal-hal baik datang kepada mereka yang menunggu!",
+    "Memoles piksel...",
+    "Merender adegan terakhir...",
 ];
 
 export const generateCombinedImage = async (
@@ -42,17 +43,17 @@ export const generateCombinedImage = async (
     const referencePart = await fileToGenerativePart(referenceImage);
     const productPart = await fileToGenerativePart(productImage);
 
-    const userFacingPrompt = `Analyze the first image (reference scene/model) and the second image (product). Create a new, photorealistic image where the product from the second image is naturally and seamlessly integrated into the scene from the first image. 
-The final output must be a single, combined image in a landscape 16:9 aspect ratio.
-Maintain a minimalist modern aesthetic, clean realism, and natural daylight.
-The final output should be a close-up shot.
-${extraNotes ? `\nAdditional user notes: "${extraNotes}"` : ""}`;
+    const userFacingPrompt = `Analisis gambar pertama (adegan/model referensi) dan gambar kedua (produk). Buat gambar baru yang fotorealistik di mana produk dari gambar kedua diintegrasikan secara alami dan mulus ke dalam adegan dari gambar pertama.
+Output akhir harus berupa satu gambar gabungan dalam rasio aspek lanskap 16:9.
+Pertahankan estetika modern minimalis, realisme bersih, dan cahaya alami.
+Output akhir harus berupa bidikan close-up.
+${extraNotes ? `\nCatatan pengguna tambahan: "${extraNotes}"` : ""}`;
 
     const fullPrompt = `${userFacingPrompt}
     
-IMPORTANT RULES:
-1.  Never mention or show brand names or product specifications.
-2.  If a watch is visible, describe it only as 'wearing a watch'.`;
+ATURAN PENTING:
+1. Jangan pernah menyebutkan atau menampilkan nama merek atau spesifikasi produk.
+2. Jika jam tangan terlihat, deskripsikan hanya sebagai 'mengenakan jam tangan'.`;
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image-preview',
@@ -72,7 +73,7 @@ IMPORTANT RULES:
         }
     }
     
-    throw new Error("Image combination failed. No image data received.");
+    throw new Error("Kombinasi gambar gagal. Tidak ada data gambar yang diterima.");
 };
 
 
@@ -84,11 +85,11 @@ export const generateVideoFromImage = async (
     const ai = getAiClient();
     const apiKey = getApiKey();
 
-    const prompt = `Based on the provided image, create a photorealistic video. The video's aspect ratio MUST be landscape 16:9, matching the input image. This is a critical requirement.
-Duration: 8 seconds.
-Frames per second: 24.
-Scene: The video must be a direct continuation of the scene in the image.
-Movement: Introduce subtle, realistic movements. This could include natural hand or fabric movement, a gentle sway of the body or clothing, an occasional breeze effect if outdoors, and a slight handheld micro-shake for camera realism. Maintain the minimalist, clean, and modern aesthetic.
+    const prompt = `Berdasarkan gambar yang disediakan, buat video fotorealistik. Rasio aspek video HARUS lanskap 16:9, sesuai dengan gambar input. Ini adalah persyaratan penting.
+Durasi: 8 detik.
+Frame per detik: 24.
+Adegan: Video harus merupakan kelanjutan langsung dari adegan di gambar.
+Gerakan: Perkenalkan gerakan yang halus dan realistis. Ini bisa termasuk gerakan tangan atau kain yang alami, goyangan lembut tubuh atau pakaian, efek angin sepoi-sepoi sesekali jika di luar ruangan, dan sedikit guncangan mikro genggam untuk realisme kamera. Pertahankan estetika minimalis, bersih, dan modern.
     `;
     
     const imageResponse = await fetch(image.url);
@@ -119,7 +120,7 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
     updateProgress(5); 
 
     while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 20000)); // Increased polling interval to 20 seconds
+        await new Promise(resolve => setTimeout(resolve, 20000)); // Interval polling ditingkatkan menjadi 20 detik
         operation = await ai.operations.getVideosOperation({ operation: operation });
         pollCount++;
         const progress = 5 + Math.min(90, Math.round((pollCount / MAX_POLLS_FOR_PROGRESS) * 90));
@@ -130,17 +131,17 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
     updateProgress(100);
 
     if (operation.error) {
-        // More specific error handling for rate limiting
+        // Penanganan kesalahan yang lebih spesifik untuk pembatasan laju
         const errorMessage = String(operation.error.message);
         if (errorMessage.includes('429')) {
-             throw new Error(`Rate limit exceeded. The API is receiving too many requests. Please wait a moment before trying again. Error: ${errorMessage}`);
+             throw new Error(`Batas laju terlampaui. API menerima terlalu banyak permintaan. Harap tunggu sejenak sebelum mencoba lagi. Error: ${errorMessage}`);
         }
-        throw new Error(`Video generation failed: ${errorMessage}`);
+        throw new Error(`Pembuatan video gagal: ${errorMessage}`);
     }
 
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
     if (!downloadLink) {
-        throw new Error("Video generation succeeded, but no download link was provided.");
+        throw new Error("Pembuatan video berhasil, tetapi tidak ada tautan unduhan yang diberikan.");
     }
     
     const videoResponse = await fetch(`${downloadLink}&key=${apiKey}`);
@@ -151,7 +152,7 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
 };
 
 export const upscaleVideo = async (
-    baseImage: GeneratedImage, // Use the original image for consistency
+    baseImage: GeneratedImage, // Gunakan gambar asli untuk konsistensi
     factor: number,
     updateLoadingMessage: (message: string) => void,
     updateProgress: (progress: number) => void
@@ -159,12 +160,12 @@ export const upscaleVideo = async (
     const ai = getAiClient();
     const apiKey = getApiKey();
 
-    const prompt = `Based on the provided image, create an EXTREMELY HIGH-DETAIL, photorealistic video, simulating a ${factor}x resolution upscale. Focus on maximizing sharpness, texture detail, and overall clarity.
-The video's aspect ratio MUST be landscape 16:9, matching the input image. This is a critical requirement.
-Duration: 8 seconds.
-Frames per second: 24.
-Scene: The video must be a direct continuation of the scene in the image.
-Movement: Introduce subtle, realistic movements. This could include natural hand or fabric movement, a gentle sway of the body or clothing, an occasional breeze effect if outdoors, and a slight handheld micro-shake for camera realism. Maintain the minimalist, clean, and modern aesthetic.
+    const prompt = `Berdasarkan gambar yang disediakan, buat video fotorealistik SANGAT DETAIL, mensimulasikan peningkatan resolusi ${factor}x. Fokus pada memaksimalkan ketajaman, detail tekstur, dan kejernihan keseluruhan.
+Rasio aspek video HARUS lanskap 16:9, sesuai dengan gambar input. Ini adalah persyaratan penting.
+Durasi: 8 detik.
+Frame per detik: 24.
+Adegan: Video harus merupakan kelanjutan langsung dari adegan di gambar.
+Gerakan: Perkenalkan gerakan yang halus dan realistis. Ini bisa termasuk gerakan tangan atau kain yang alami, goyangan lembut tubuh atau pakaian, efek angin sepoi-sepoi sesekali jika di luar ruangan, dan sedikit guncangan mikro genggam untuk realisme kamera. Pertahankan estetika minimalis, bersih, dan modern.
     `;
 
     const imageResponse = await fetch(baseImage.url);
@@ -195,7 +196,7 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
     updateProgress(5);
 
     while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 20000)); // Increased polling interval to 20 seconds
+        await new Promise(resolve => setTimeout(resolve, 20000)); // Interval polling ditingkatkan menjadi 20 detik
         operation = await ai.operations.getVideosOperation({ operation: operation });
         pollCount++;
         const progress = 5 + Math.min(90, Math.round((pollCount / MAX_POLLS_FOR_PROGRESS) * 90));
@@ -206,17 +207,17 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
     updateProgress(100);
 
     if (operation.error) {
-        // More specific error handling for rate limiting
+        // Penanganan kesalahan yang lebih spesifik untuk pembatasan laju
         const errorMessage = String(operation.error.message);
         if (errorMessage.includes('429')) {
-             throw new Error(`Rate limit exceeded. The API is receiving too many requests. Please wait a moment before trying again. Error: ${errorMessage}`);
+             throw new Error(`Batas laju terlampaui. API menerima terlalu banyak permintaan. Harap tunggu sejenak sebelum mencoba lagi. Error: ${errorMessage}`);
         }
-        throw new Error(`Video upscaling failed: ${errorMessage}`);
+        throw new Error(`Peningkatan skala video gagal: ${errorMessage}`);
     }
 
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
     if (!downloadLink) {
-        throw new Error("Video upscaling succeeded, but no download link was provided.");
+        throw new Error("Peningkatan skala video berhasil, tetapi tidak ada tautan unduhan yang diberikan.");
     }
     
     const videoResponse = await fetch(`${downloadLink}&key=${apiKey}`);

@@ -4,29 +4,29 @@ import React, { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import GeneratedResult from './components/GeneratedResult';
 import Loader from './components/Loader';
-import SettingsModal from './components/SettingsModal';
-import { SettingsIcon } from './components/icons';
 import { generateCombinedImage, generateVideoFromImage, upscaleVideo } from './services/geminiService';
 import { preprocessImageTo16x9 } from './utils/fileUtils';
 import { cropVideoTo9x16 } from './utils/videoUtils';
 import type { ImageFile, GeneratedImage, GeneratedVideo, UpscaledVideos } from './types';
+import SettingsModal from './components/SettingsModal';
+import { SettingsIcon } from './components/icons';
 
 const API_KEY_STORAGE_KEY = 'gemini_api_key';
 
-// Helper to create more user-friendly error messages
+// Helper untuk membuat pesan kesalahan yang lebih ramah pengguna
 const getDisplayError = (err: unknown): string => {
   let message = "Terjadi kesalahan yang tidak diketahui.";
   if (err instanceof Error) {
     message = err.message;
-    // Check for quota-related errors from the Gemini API
-    if (message.includes('RESOURCE_EXHAUSTED') || message.toLowerCase().includes('quota')) {
-      return "Kuota API Anda telah terlampaui. Silakan ganti dengan Kunci API baru di menu Pengaturan (ikon gerigi).";
+    // Periksa kesalahan terkait kuota/kunci API dari Gemini API
+    if (message.includes('RESOURCE_EXHAUSTED') || message.toLowerCase().includes('quota') || message.includes('429')) {
+      return "Kuota API Anda telah terlampaui. Silakan periksa atau perbarui kunci Anda di menu pengaturan (ikon gerigi ⚙️).";
     }
      if (message.includes('API key not valid')) {
-      return "Kunci API tidak valid. Silakan periksa kunci Anda di menu Pengaturan.";
+      return "Kunci API tidak valid. Silakan periksa kunci Anda di menu pengaturan (ikon gerigi ⚙️).";
     }
      if (message.includes("Kunci API Gemini tidak ditemukan")) {
-       return "Kunci API Gemini tidak ditemukan. Harap atur di menu Pengaturan (ikon gerigi di pojok kanan atas).";
+       return "Kunci API Gemini tidak ditemukan. Harap atur di menu pengaturan (ikon gerigi ⚙️).";
     }
   }
   return message;
@@ -34,6 +34,17 @@ const getDisplayError = (err: unknown): string => {
 
 
 function App() {
+  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem(API_KEY_STORAGE_KEY) || '');
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+
+  // Saat komponen dimuat, periksa apakah kita perlu menampilkan modal
+  useEffect(() => {
+    const keyExists = localStorage.getItem(API_KEY_STORAGE_KEY) || process.env.API_KEY;
+    if (!keyExists) {
+      setIsSettingsModalOpen(true);
+    }
+  }, []);
+
   const [referenceImage, setReferenceImage] = useState<ImageFile | null>(null);
   const [productImage, setProductImage] = useState<ImageFile | null>(null);
   const [extraNotes, setExtraNotes] = useState<string>('');
@@ -51,39 +62,24 @@ function App() {
   const [croppingProgress, setCroppingProgress] = useState<number>(0);
   const [croppedVideo, setCroppedVideo] = useState<GeneratedVideo | null>(null);
 
-  const [isUpscaling, setIsUpscaling] = useState<number | null>(null); // Store the factor being upscaled
+  const [isUpscaling, setIsUpscaling] = useState<number | null>(null); // Menyimpan faktor yang sedang ditingkatkan skalanya
   const [upscalingMessage, setUpscalingMessage] = useState<string>('');
   const [upscalingProgress, setUpscalingProgress] = useState<number>(0);
   const [upscaledVideos, setUpscaledVideos] = useState<UpscaledVideos>({});
 
   const [error, setError] = useState<string | null>(null);
 
-  const [apiKey, setApiKey] = useState('');
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isApiKeySet, setIsApiKeySet] = useState(false);
-
-  useEffect(() => {
-    const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    if (storedApiKey) {
-      setApiKey(storedApiKey);
-      setIsApiKeySet(true);
-    }
-  }, []);
-
-  const handleSaveApiKey = (newApiKey: string) => {
-    setApiKey(newApiKey);
-    localStorage.setItem(API_KEY_STORAGE_KEY, newApiKey);
-    setIsApiKeySet(!!newApiKey);
+  const handleSaveApiKey = (newKey: string) => {
+    setApiKey(newKey);
+    localStorage.setItem(API_KEY_STORAGE_KEY, newKey);
     setIsSettingsModalOpen(false);
-    setError(null); // Clear previous errors
+    // Jika ada kesalahan terkait API, hapus agar pengguna dapat mencoba lagi.
+    if (error && error.toLowerCase().includes('kunci api')) {
+      setError(null);
+    }
   };
 
   const handleImageGeneration = async () => {
-    if (!localStorage.getItem(API_KEY_STORAGE_KEY)) {
-      setError("Harap atur Kunci API Gemini Anda di menu Pengaturan sebelum melanjutkan.");
-      setIsSettingsModalOpen(true);
-      return;
-    }
     if (!referenceImage || !productImage) {
       setError("Silakan unggah gambar referensi dan produk.");
       return;
@@ -233,18 +229,10 @@ function App() {
     return null;
   };
 
+  const hasApiKey = apiKey || process.env.API_KEY;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#111111] to-[#030303] text-white p-4 sm:p-8">
-      <div className="absolute top-4 right-4 z-20">
-        <button
-          onClick={() => setIsSettingsModalOpen(true)}
-          className="p-2 rounded-full bg-black/30 backdrop-blur-sm hover:bg-amber-400/20 text-gray-300 hover:text-amber-400 transition-colors"
-          aria-label="Pengaturan"
-        >
-          <SettingsIcon className="w-6 h-6" />
-        </button>
-      </div>
-
       <SettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
@@ -252,7 +240,16 @@ function App() {
         currentApiKey={apiKey}
       />
 
-      <header className="text-center mb-10">
+      <header className="text-center mb-10 relative">
+        <div className="absolute top-0 right-0 p-2 z-10">
+          <button
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="text-gray-400 hover:text-amber-400 transition-colors p-2 rounded-full hover:bg-gray-800"
+              aria-label="Pengaturan"
+          >
+              <SettingsIcon className="w-7 h-7" />
+          </button>
+        </div>
         <h1 className="text-4xl sm:text-5xl font-bold">
           AI Asisten <span className="text-amber-400">Affiliator</span>
         </h1>
@@ -261,10 +258,10 @@ function App() {
         </p>
       </header>
       
-      {!isApiKeySet && !isSettingsModalOpen && (
+      {!hasApiKey && (
           <div className="max-w-4xl mx-auto mb-6 p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg text-center">
               <p className="font-semibold text-yellow-200">
-                  Kunci API Google Gemini Anda belum diatur. Silakan klik ikon gerigi (⚙️) di pojok kanan atas untuk menambahkannya.
+                  Kunci API Google Gemini Anda belum diatur. Silakan atur di <button onClick={() => setIsSettingsModalOpen(true)} className="underline font-bold hover:text-white">menu pengaturan</button> (ikon gerigi ⚙️).
               </p>
           </div>
       )}
