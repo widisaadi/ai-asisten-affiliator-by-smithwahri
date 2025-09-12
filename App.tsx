@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import GeneratedResult from './components/GeneratedResult';
@@ -24,7 +25,7 @@ const getDisplayError = (err: unknown): string => {
      if (message.includes('API key not valid')) {
       return "Kunci API tidak valid. Silakan periksa kunci Anda di menu Pengaturan.";
     }
-     if (message.includes("Kunci API Gemini tidak disediakan")) {
+     if (message.includes("Kunci API Gemini tidak ditemukan")) {
        return "Kunci API Gemini tidak ditemukan. Harap atur di menu Pengaturan (ikon gerigi di pojok kanan atas).";
     }
   }
@@ -78,7 +79,7 @@ function App() {
   };
 
   const handleImageGeneration = async () => {
-    if (!apiKey) {
+    if (!localStorage.getItem(API_KEY_STORAGE_KEY)) {
       setError("Harap atur Kunci API Gemini Anda di menu Pengaturan sebelum melanjutkan.");
       setIsSettingsModalOpen(true);
       return;
@@ -101,7 +102,7 @@ function App() {
       const processedProdFile = await preprocessImageTo16x9(productImage.file);
 
       setImageLoadingMessage("Membuat gambar fotorealistik...");
-      const result = await generateCombinedImage(processedRefFile, processedProdFile, extraNotes, apiKey);
+      const result = await generateCombinedImage(processedRefFile, processedProdFile, extraNotes);
       setGeneratedImage(result);
 
     } catch (err) {
@@ -127,7 +128,7 @@ function App() {
     setVideoLoadingMessage("Memulai pembuatan video...");
 
     try {
-        const result = await generateVideoFromImage(generatedImage, apiKey, setVideoLoadingMessage, setVideoProgress);
+        const result = await generateVideoFromImage(generatedImage, setVideoLoadingMessage, setVideoProgress);
         setGeneratedVideo(result);
     } catch (err) {
         console.error(err);
@@ -174,7 +175,7 @@ function App() {
     setUpscalingMessage(`Meningkatkan skala video ${factor}x...`);
     
     try {
-        const result = await upscaleVideo(generatedImage, factor, apiKey, setUpscalingMessage, setUpscalingProgress);
+        const result = await upscaleVideo(generatedImage, factor, setUpscalingMessage, setUpscalingProgress);
         
         setUpscalingMessage('Finalisasi: memotong ke 9:16...');
         const croppedResultUrl = await cropVideoTo9x16(result.url);

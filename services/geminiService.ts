@@ -4,11 +4,20 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { fileToGenerativePart } from '../utils/fileUtils';
 import type { GeneratedImage } from '../types';
 
-// Helper to get the API client initialized
-const getAiClient = (apiKey: string) => {
+const API_KEY_STORAGE_KEY = 'gemini_api_key';
+
+// Helper to get the latest API key directly from storage
+const getApiKey = (): string => {
+    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
     if (!apiKey) {
-        throw new Error("Kunci API Gemini tidak disediakan. Harap atur di menu Pengaturan.");
+        throw new Error("Kunci API Gemini tidak ditemukan. Harap atur di menu Pengaturan.");
     }
+    return apiKey;
+};
+
+// Helper to get the API client initialized with the latest key
+const getAiClient = () => {
+    const apiKey = getApiKey();
     return new GoogleGenAI({ apiKey });
 };
 
@@ -26,11 +35,10 @@ const loadingMessages = [
 export const generateCombinedImage = async (
     referenceImage: File,
     productImage: File,
-    extraNotes: string,
-    apiKey: string
+    extraNotes: string
 ): Promise<{ url: string; prompt: string }> => {
     
-    const ai = getAiClient(apiKey);
+    const ai = getAiClient();
     const referencePart = await fileToGenerativePart(referenceImage);
     const productPart = await fileToGenerativePart(productImage);
 
@@ -70,14 +78,11 @@ IMPORTANT RULES:
 
 export const generateVideoFromImage = async (
     image: GeneratedImage,
-    apiKey: string,
     updateLoadingMessage: (message: string) => void,
     updateProgress: (progress: number) => void
 ): Promise<{ url: string; prompt: string }> => {
-    const ai = getAiClient(apiKey);
-     if (!apiKey) {
-        throw new Error("Kunci API Gemini tidak ditemukan untuk mengambil video.");
-    }
+    const ai = getAiClient();
+    const apiKey = getApiKey();
 
     const prompt = `Based on the provided image, create a photorealistic video. The video's aspect ratio MUST be landscape 16:9, matching the input image. This is a critical requirement.
 Duration: 8 seconds.
@@ -148,14 +153,11 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
 export const upscaleVideo = async (
     baseImage: GeneratedImage, // Use the original image for consistency
     factor: number,
-    apiKey: string,
     updateLoadingMessage: (message: string) => void,
     updateProgress: (progress: number) => void
 ): Promise<{ url: string; prompt: string }> => {
-    const ai = getAiClient(apiKey);
-     if (!apiKey) {
-        throw new Error("Kunci API Gemini tidak ditemukan untuk mengambil video.");
-    }
+    const ai = getAiClient();
+    const apiKey = getApiKey();
 
     const prompt = `Based on the provided image, create an EXTREMELY HIGH-DETAIL, photorealistic video, simulating a ${factor}x resolution upscale. Focus on maximizing sharpness, texture detail, and overall clarity.
 The video's aspect ratio MUST be landscape 16:9, matching the input image. This is a critical requirement.
