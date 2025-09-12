@@ -1,12 +1,13 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { fileToGenerativePart } from '../utils/fileUtils';
 import type { GeneratedImage } from '../types';
 
-// Helper to get the API client initialized with the user's key from localStorage
+// Helper to get the API client initialized
 const getAiClient = () => {
-    const apiKey = localStorage.getItem('gemini_api_key');
+    const apiKey = process.env.API_KEY;
     if (!apiKey) {
-        throw new Error("Kunci API Gemini tidak ditemukan. Silakan atur di menu pengaturan.");
+        throw new Error("Kunci API Gemini tidak ditemukan. Pastikan variabel lingkungan API_KEY telah diatur.");
     }
     return new GoogleGenAI({ apiKey });
 };
@@ -72,7 +73,7 @@ export const generateVideoFromImage = async (
     updateProgress: (progress: number) => void
 ): Promise<{ url: string; prompt: string }> => {
     const ai = getAiClient();
-    const apiKey = localStorage.getItem('gemini_api_key');
+    const apiKey = process.env.API_KEY;
      if (!apiKey) {
         throw new Error("Kunci API Gemini tidak ditemukan untuk mengambil video.");
     }
@@ -112,7 +113,7 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
     updateProgress(5); 
 
     while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 20000)); // Increased polling interval to 20 seconds
         operation = await ai.operations.getVideosOperation({ operation: operation });
         pollCount++;
         const progress = 5 + Math.min(90, Math.round((pollCount / MAX_POLLS_FOR_PROGRESS) * 90));
@@ -123,7 +124,12 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
     updateProgress(100);
 
     if (operation.error) {
-        throw new Error(`Video generation failed: ${operation.error.message}`);
+        // More specific error handling for rate limiting
+        const errorMessage = String(operation.error.message);
+        if (errorMessage.includes('429')) {
+             throw new Error(`Rate limit exceeded. The API is receiving too many requests. Please wait a moment before trying again. Error: ${errorMessage}`);
+        }
+        throw new Error(`Video generation failed: ${errorMessage}`);
     }
 
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
@@ -145,7 +151,7 @@ export const upscaleVideo = async (
     updateProgress: (progress: number) => void
 ): Promise<{ url: string; prompt: string }> => {
     const ai = getAiClient();
-    const apiKey = localStorage.getItem('gemini_api_key');
+    const apiKey = process.env.API_KEY;
      if (!apiKey) {
         throw new Error("Kunci API Gemini tidak ditemukan untuk mengambil video.");
     }
@@ -186,7 +192,7 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
     updateProgress(5);
 
     while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 20000)); // Increased polling interval to 20 seconds
         operation = await ai.operations.getVideosOperation({ operation: operation });
         pollCount++;
         const progress = 5 + Math.min(90, Math.round((pollCount / MAX_POLLS_FOR_PROGRESS) * 90));
@@ -197,7 +203,12 @@ Movement: Introduce subtle, realistic movements. This could include natural hand
     updateProgress(100);
 
     if (operation.error) {
-        throw new Error(`Video upscaling failed: ${operation.error.message}`);
+        // More specific error handling for rate limiting
+        const errorMessage = String(operation.error.message);
+        if (errorMessage.includes('429')) {
+             throw new Error(`Rate limit exceeded. The API is receiving too many requests. Please wait a moment before trying again. Error: ${errorMessage}`);
+        }
+        throw new Error(`Video upscaling failed: ${errorMessage}`);
     }
 
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;

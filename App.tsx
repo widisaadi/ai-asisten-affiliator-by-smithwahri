@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import FileUpload from './components/FileUpload';
 import GeneratedResult from './components/GeneratedResult';
 import Loader from './components/Loader';
-import SettingsModal from './components/SettingsModal';
 import { generateCombinedImage, generateVideoFromImage, upscaleVideo } from './services/geminiService';
 import { preprocessImageTo16x9 } from './utils/fileUtils';
 import { cropVideoTo9x16 } from './utils/videoUtils';
-import { SettingsIcon } from './components/icons';
 import type { ImageFile, GeneratedImage, GeneratedVideo, UpscaledVideos } from './types';
 
 // Helper to create more user-friendly error messages
@@ -16,10 +15,14 @@ const getDisplayError = (err: unknown): string => {
     message = err.message;
     // Check for quota-related errors from the Gemini API
     if (message.includes('RESOURCE_EXHAUSTED') || message.toLowerCase().includes('quota')) {
-      return "Kuota API Anda telah terlampaui. Silakan periksa status penagihan Google AI Anda dan pastikan penagihan diaktifkan untuk proyek Anda untuk terus menggunakan layanan ini.";
+      return "Kuota API Anda telah terlampaui. Harap ganti dengan Kunci API baru di panel 'Secrets', atau aktifkan penagihan untuk proyek Google Cloud Anda.";
     }
+    // Update error message for API key to reflect environment variable usage.
      if (message.includes('API key not valid')) {
-      return "Kunci API tidak valid. Silakan periksa kembali kunci API Gemini Anda di menu pengaturan.";
+      return "Kunci API tidak valid. Pastikan variabel lingkungan API_KEY Anda benar di panel 'Secrets'.";
+    }
+     if (message.includes("Kunci API Gemini tidak ditemukan")) {
+       return "Kunci API Gemini tidak ditemukan. Pastikan Anda telah mengaturnya di panel 'Secrets' sebagai variabel bernama API_KEY.";
     }
   }
   return message;
@@ -27,9 +30,6 @@ const getDisplayError = (err: unknown): string => {
 
 
 function App() {
-  const [apiKey, setApiKey] = useState<string>('');
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
   const [referenceImage, setReferenceImage] = useState<ImageFile | null>(null);
   const [productImage, setProductImage] = useState<ImageFile | null>(null);
   const [extraNotes, setExtraNotes] = useState<string>('');
@@ -54,34 +54,12 @@ function App() {
 
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const storedApiKey = localStorage.getItem('gemini_api_key');
-    if (storedApiKey) {
-      setApiKey(storedApiKey);
-    }
-  }, []);
-
-  const handleSaveApiKey = (newKey: string) => {
-    if (newKey) {
-        localStorage.setItem('gemini_api_key', newKey);
-        setApiKey(newKey);
-    } else {
-        localStorage.removeItem('gemini_api_key');
-        setApiKey('');
-    }
-    setIsSettingsOpen(false);
-  };
-
-
   const handleImageGeneration = async () => {
     if (!referenceImage || !productImage) {
       setError("Silakan unggah gambar referensi dan produk.");
       return;
     }
-    if (!apiKey) {
-      setError("Silakan masukkan kunci API Gemini Anda di pengaturan terlebih dahulu.");
-      return;
-    }
+    
     setError(null);
     setIsLoadingImage(true);
     setGeneratedImage(null);
@@ -191,27 +169,13 @@ function App() {
     }
   };
 
-  const isCombineButtonDisabled = !referenceImage || !productImage || isLoadingImage || !apiKey;
+  const isCombineButtonDisabled = !referenceImage || !productImage || isLoadingImage;
 
   return (
     <>
-      <SettingsModal 
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onSave={handleSaveApiKey}
-        currentApiKey={apiKey}
-      />
       <div className="min-h-screen bg-gradient-to-b from-[#101010] to-[#030303] text-gray-200 p-4 sm:p-8">
         <div className="container mx-auto max-w-6xl">
           <header className="text-center mb-12 relative">
-            <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="absolute top-0 right-0 p-2 text-gray-400 hover:text-amber-400 transition-colors"
-                aria-label="Pengaturan"
-                title="Pengaturan Kunci API"
-            >
-                <SettingsIcon className="w-6 h-6" />
-            </button>
             <h1 className="text-4xl sm:text-5xl font-bold text-amber-400 tracking-wide">AI Product Placement Studio</h1>
             <p className="mt-4 text-lg text-gray-400 max-w-3xl mx-auto">
               Gabungkan produk ke dalam adegan dengan mulus. Unggah referensi dan gambar produk untuk menghasilkan visual fotorealistik.
@@ -219,18 +183,6 @@ function App() {
           </header>
 
           <main>
-            {!apiKey && (
-                 <div className="mb-6 text-center bg-amber-900/30 border border-amber-700 p-4 rounded-lg">
-                    <p className="font-semibold text-amber-300">Konfigurasi Diperlukan</p>
-                    <p className="text-amber-400">
-                        Silakan masukkan kunci API Google Gemini Anda di{' '}
-                        <button onClick={() => setIsSettingsOpen(true)} className="font-bold underline hover:text-white">
-                        menu pengaturan
-                        </button>
-                        {' '}untuk memulai.
-                    </p>
-                </div>
-            )}
             <div className="bg-black/20 backdrop-blur-lg border border-gray-800 rounded-2xl shadow-2xl p-6 sm:p-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FileUpload
@@ -262,7 +214,6 @@ function App() {
                   onClick={handleImageGeneration}
                   disabled={isCombineButtonDisabled}
                   className="bg-amber-400 text-black font-bold py-3 px-8 rounded-lg text-lg hover:bg-amber-500 transition-colors disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(252,212,40,0.3)] hover:shadow-[0_0_25px_rgba(252,212,40,0.5)]"
-                  title={!apiKey ? "Harap masukkan kunci API di pengaturan" : ""}
                 >
                   {isLoadingImage ? 'Membuat...' : 'Gabungkan Gambar'}
                 </button>
