@@ -39,7 +39,7 @@ function App() {
 
   // Saat komponen dimuat, periksa apakah kita perlu menampilkan modal
   useEffect(() => {
-    const keyExists = localStorage.getItem(API_KEY_STORAGE_KEY) || process.env.API_KEY;
+    const keyExists = localStorage.getItem(API_KEY_STORAGE_KEY);
     if (!keyExists) {
       setIsSettingsModalOpen(true);
     }
@@ -229,7 +229,7 @@ function App() {
     return null;
   };
 
-  const hasApiKey = apiKey || process.env.API_KEY;
+  const hasApiKey = !!apiKey;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#111111] to-[#030303] text-white p-4 sm:p-8">

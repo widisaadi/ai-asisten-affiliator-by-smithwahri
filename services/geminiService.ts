@@ -6,10 +6,10 @@ import type { GeneratedImage } from '../types';
 
 const API_KEY_STORAGE_KEY = 'gemini_api_key';
 
-// Helper untuk mendapatkan Kunci API dari localStorage atau 'Secrets'
+// Helper untuk mendapatkan Kunci API dari localStorage
 const getApiKey = (): string => {
-    // Prioritaskan kunci dari localStorage, lalu fallback ke 'Secrets'
-    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY) || process.env.API_KEY;
+    // Kunci API diambil secara eksklusif dari localStorage untuk memastikan setiap pengguna menggunakan kuncinya sendiri.
+    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
     if (!apiKey) {
         throw new Error("Kunci API Gemini tidak ditemukan. Harap atur di menu pengaturan (ikon gerigi ⚙️).");
     }
